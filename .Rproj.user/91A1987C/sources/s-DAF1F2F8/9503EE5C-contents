@@ -59,7 +59,7 @@ Annual assessment of chlorophyll-a in Old Tampa Bay achieving the regulatory thr
 reactable(totab, 
   columns = list(
       yr = colDef(name = 'Year'), 
-      val = colDef(name = 'Ann. mean Chl-a ($\\mu$g/L)', format = colFormat(digits = 1)), 
+      val = colDef(name = 'Ann. mean Chl-a (ug/L)', format = colFormat(digits = 1)), 
       thresh = colDef(name = 'Regulatory threshold'), 
       target = colDef(name = 'Management target'), 
       thr = colDef(name = 'Regulatory category'), 
