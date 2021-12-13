@@ -1,0 +1,121 @@
+---
+title: "OTB regulatory assessment"
+author: "M. W. Beck"
+date: "`r Sys.time()`"
+output: 
+  html_document:
+    code_folding: hide
+---
+  
+```{r setup, warning = F, message = F}
+library(knitr)
+library(tidyverse)
+library(tbeptools)
+library(here)
+library(lubridate)
+library(reactable)
+
+opts_chunk$set(warning = FALSE, message = FALSE)
+
+load(file = here('data/epcdata.RData'))
+load(file = here('data/phydata.RData'))
+
+yrrng <- c(2000, 2020)
+```
+
+```{r}
+trgs <- targets
+
+bay_segment <- 'OTB'
+param <- 'chla'
+avedat <- anlz_avedat(epcdata, partialyr = F) %>%
+  .$ann
+
+wqdat <- avedat %>%
+  dplyr::filter(yr >= yrrng[1] & yr <= yrrng[2]) %>%
+  dplyr::filter(bay_segment %in% !!bay_segment) %>%
+  dplyr::filter(var %in% !!paste0('mean_', param)) %>%
+  dplyr::left_join(trgs, by = 'bay_segment') %>%
+  dplyr::select(bay_segment, yr, var, val, thresh = !!paste0(param, '_thresh'), target = !!paste0(param, '_target')) %>%
+  dplyr::mutate(
+    bay_segment = factor(bay_segment, levels = c('OTB', 'HB', 'MTB', 'LTB')),
+    thr = dplyr::case_when(
+      val < thresh ~ 'green',
+      val >= thresh ~ 'red'
+    ), 
+    trg = dplyr::case_when(
+      val < target ~ 'green', 
+      val >= target ~ 'red'
+    )
+  )
+
+totab <- wqdat %>% 
+  select(-bay_segment, -var)
+```
+
+Annual assessment of chlorophyll-a in Old Tampa Bay achieving the regulatory threshold or management target (green = achieved, red = not achieved).  Water quality data from Environmental Protection Commission of Hillsborough County.
+
+```{r}
+reactable(totab, 
+  columns = list(
+      yr = colDef(name = 'Year'), 
+      val = colDef(name = 'Ann. mean Chl-a ($\\mu$g/L)', format = colFormat(digits = 1)), 
+      thresh = colDef(name = 'Regulatory threshold'), 
+      target = colDef(name = 'Management target'), 
+      thr = colDef(name = 'Regulatory category'), 
+      trg = colDef(name = 'Managment category')
+    ), 
+  resizable = T, showSortable = T, 
+  defaultPageSize = nrow(totab), 
+  showPageSizeOptions = F
+  ) 
+```
+
+```{r}
+otbsta <- stations %>% 
+  filter(bay_segment == 'OTB') %>% 
+  pull(epchc_station)
+
+phydat <- phydata %>% 
+  filter(name %in% 'Pyrodinium bahamense') %>% 
+  filter(epchc_station %in% otbsta) %>% 
+  mutate(
+    count = count * 1e4, # /0.1mL to /L
+    val = case_when(
+      count >= 1e6 ~ 'high',
+      count < 1e6 & count >= 1e5 ~ 'medium', 
+      T ~ 'other'
+    )
+  ) %>% 
+  group_by(yr) %>% 
+  summarise(
+    hval = sum(val == 'high'), 
+    mval = sum(val == 'medium'),
+    .groups = 'drop'
+  )
+
+totab <- wqdat %>% 
+  select(yr, thr, trg) %>% 
+  left_join(phydat, by = 'yr') %>% 
+  mutate(
+    hval = ifelse(is.na(hval), 0, hval),
+    mval = ifelse(is.na(mval), 0, mval)
+    )
+```
+
+Comparison of annual assessment of chlorophyll-a in Old Tampa Bay with *P. bahamense* cell concentrations.  Phytoplankton data from Environmental Protection Commission of Hillsborough County.
+
+```{r}
+reactable(totab, 
+  columns = list(
+      yr = colDef(name = 'Year'), 
+      thr = colDef(name = 'Regulatory category'), 
+      trg = colDef(name = 'Managment category'), 
+      hval = colDef(name = 'Counts when P. bahamense > 1e6 cells/L'),
+      mval = colDef(name = 'Counts when P. bahamense > 1e5, < 1e6 cells/L')
+    ), 
+  resizable = T, showSortable = T, 
+  defaultPageSize = nrow(totab), 
+  showPageSizeOptions = F
+  ) 
+```
